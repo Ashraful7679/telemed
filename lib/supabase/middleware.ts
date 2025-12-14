@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+export { updateSession as middleware } from '@/lib/supabase/middleware'
 
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({
