@@ -1,17 +1,14 @@
-import { createServerClient, type CookieOptions } from '@supabase/supabase-js'
-import type { Database } from '@/lib/supabase/types'
+import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function updateSession(request: NextRequest) {
-  // Initialize the response
   let response = NextResponse.next({
     request: {
       headers: request.headers,
     },
   })
 
-  // Create a Supabase server client
-  const supabase = createServerClient<Database>(
+  const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
@@ -29,8 +26,6 @@ export async function updateSession(request: NextRequest) {
     }
   )
 
-  // Check the currently logged-in user (optional: you can also handle session logic here)
   await supabase.auth.getUser()
-
   return response
 }
