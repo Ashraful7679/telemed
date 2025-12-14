@@ -1,6 +1,5 @@
-import { createServerClient } from '@supabase/ssr'
+import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
-export { updateSession as middleware } from '@/lib/supabase/middleware'
 
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({
@@ -17,25 +16,16 @@ export async function updateSession(request: NextRequest) {
         get(name: string) {
           return request.cookies.get(name)?.value
         },
-        set(name: string, value: string, options: any) {
-          response.cookies.set({
-            name,
-            value,
-            ...options,
-          })
+        set(name: string, value: string, options: CookieOptions) {
+          response.cookies.set({ name, value, ...options })
         },
-        remove(name: string, options: any) {
-          response.cookies.set({
-            name,
-            value: '',
-            ...options,
-          })
+        remove(name: string, options: CookieOptions) {
+          response.cookies.set({ name, value: '', ...options })
         },
       },
     }
   )
 
   await supabase.auth.getUser()
-
   return response
 }
