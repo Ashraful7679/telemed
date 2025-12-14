@@ -1,4 +1,4 @@
-import { createServerClient, type CookieOptions } from '@supabase/supabase-js/dist/esm'
+import { createServerClient, type CookieOptions } from '@supabase/supabase-js'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function updateSession(request: NextRequest) {
