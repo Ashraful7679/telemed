@@ -42,27 +42,35 @@ export default function DoctorAvailabilityPage() {
     const [maxAppointments, setMaxAppointments] = useState('10')
     const [allowSameDayBooking, setAllowSameDayBooking] = useState(false)
 
-    useEffect(() => {
-        if (user) {
-            fetchSlots()
-        }
-    }, [user])
-
-    const fetchSlots = async () => {
-        const { data, error } = await supabase
-            .from('availability_slots')
-            .select('*')
-            .eq('doctor_id', user?.id)
-            .gte('slot_date', new Date().toISOString().split('T')[0])
-            .order('slot_date', { ascending: true })
-            .order('start_time', { ascending: true })
-
-        if (error) {
-            console.error('Error fetching slots:', error)
-        } else {
-            setSlots(data || [])
-        }
+useEffect(() => {
+    if (user?.id) {  // Make sure user.id exists
+        fetchSlots()
     }
+}, [user])
+
+const fetchSlots = async () => {
+    if (!user?.id) {
+        // No doctor logged in yet
+        setSlots([]) // Optional: clear previous slots
+        return
+    }
+
+    const { data, error } = await supabase
+        .from('availability_slots')
+        .select('*')
+        .eq('doctor_id', user.id)
+        .gte('slot_date', new Date().toISOString().split('T')[0])
+        .order('slot_date', { ascending: true })
+        .order('start_time', { ascending: true })
+
+    if (error) {
+        console.error('Error fetching slots:', error)
+        setSlots([])
+    } else {
+        setSlots(data || [])
+    }
+}
+
 
     const handleCreateSlots = async (e: React.FormEvent) => {
         e.preventDefault()
