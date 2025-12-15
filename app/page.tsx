@@ -1,26 +1,21 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState, useMemo } from 'react'
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/client'
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
-import { Button } from '@/components/ui/Button'
-import { Search, Star, MapPin, Clock, Calendar } from 'lucide-react'
+import { Search, Star, Clock, Calendar } from 'lucide-react'
 import Image from 'next/image'
-import { formatCurrency } from '@/lib/utils/helpers'
 import { getAvatarUrl } from '@/lib/utils/avatar'
-import { useAuth } from '@/lib/auth/hooks'
+import { useDoctors } from '@/lib/hooks/useDoctors'
+import { createClient } from '@/lib/supabase/client'
+import { useQuery } from '@tanstack/react-query'
 
 interface Doctor {
     id: string
-    profiles: {
-        full_name: string
-        avatar_url: string | null
-        gender: string | null
-    }
-    specializations: {
-        name: string
-    }
+    full_name: string
+    avatar_url: string | null
+    gender: string | null
+    specialization_name: string
     experience_years: number
     average_rating: number
     total_reviews: number
@@ -30,103 +25,33 @@ interface Doctor {
 }
 
 export default function HomePage() {
-    const [doctors, setDoctors] = useState<Doctor[]>([])
-    const [loading, setLoading] = useState(true)
     const [searchTerm, setSearchTerm] = useState('')
     const [selectedSpecialization, setSelectedSpecialization] = useState('')
-    const [specializations, setSpecializations] = useState<any[]>([])
     const supabase = createClient()
-    const { user, profile } = useAuth()
 
-    useEffect(() => {
-        fetchSpecializations()
-        fetchDoctors()
-    }, [])
+    const { doctors, isLoading: doctorsLoading, error: doctorsError } = useDoctors()
 
-    const fetchSpecializations = async () => {
-        const { data } = await supabase
-            .from('specializations')
-            .select('*')
-            .order('name')
-        if (data) setSpecializations(data)
-    }
-
-    const fetchDoctors = async () => {
-        let query = supabase
-            .from('doctors')
-            .select(`
-        id,
-        experience_years,
-        average_rating,
-        total_reviews,
-        is_popular,
-        profiles!inner(full_name, avatar_url, gender),
-        specializations!inner(name)
-      `)
-            .eq('status', 'approved')
-            .order('is_popular', { ascending: false })
-            .order('average_rating', { ascending: false })
-
-        const { data, error } = await query
-
-        if (error) {
-            console.error('Error fetching doctors:', error)
-        } else if (data) {
-            // Fetch next appointment info for each doctor
-            const doctorsWithSlots = await Promise.all(
-                (data as any[]).map(async (doctor) => {
-                    const { data: nextSlot } = await supabase
-                        .from('availability_slots')
-                        .select('slot_date, max_appointments')
-                        .eq('doctor_id', doctor.id)
-                        .gte('slot_date', new Date().toISOString().split('T')[0])
-                        .order('slot_date', { ascending: true })
-                        .limit(1)
-                        .single()
-
-                    // Count total available slots for upcoming appointments
-                    const { data: upcomingSlots } = await supabase
-                        .from('availability_slots')
-                        .select('id, max_appointments')
-                        .eq('doctor_id', doctor.id)
-                        .gte('slot_date', new Date().toISOString().split('T')[0])
-
-                    let totalAvailable = 0
-                    if (upcomingSlots) {
-                        for (const slot of upcomingSlots) {
-                            const { count } = await supabase
-                                .from('appointments')
-                                .select('*', { count: 'exact', head: true })
-                                .eq('slot_id', slot.id)
-                                .in('payment_status', ['paid', 'pending'])
-                                .not('status', 'eq', 'cancelled')
-
-                            totalAvailable += slot.max_appointments - (count || 0)
-                        }
-                    }
-
-                    return {
-                        ...doctor,
-                        next_appointment_date: nextSlot?.slot_date,
-                        available_slots_count: totalAvailable
-                    }
-                })
-            )
-
-            setDoctors(doctorsWithSlots)
+    const { data: specializations, isLoading: specializationsLoading } = useQuery({
+        queryKey: ['specializations'],
+        queryFn: async () => {
+            const { data } = await supabase.from('specializations').select('*').order('name')
+            return data
         }
-        setLoading(false)
-    }
-
-    const filteredDoctors = doctors.filter((doctor) => {
-        const matchesSearch = doctor.profiles.full_name
-            .toLowerCase()
-            .includes(searchTerm.toLowerCase())
-        const matchesSpecialization =
-            !selectedSpecialization ||
-            doctor.specializations.name === selectedSpecialization
-        return matchesSearch && matchesSpecialization
     })
+
+    const filteredDoctors = useMemo(() => {
+        if (!doctors) return []
+        return doctors.filter((doctor: Doctor) => {
+            const matchesSearch = doctor.full_name
+                .toLowerCase()
+                .includes(searchTerm.toLowerCase())
+            const matchesSpecialization =
+                !selectedSpecialization ||
+                doctor.specialization_name === selectedSpecialization
+            return matchesSearch && matchesSpecialization
+        })
+    }, [doctors, searchTerm, selectedSpecialization])
+
 
     const handleSignOut = async () => {
         await supabase.auth.signOut()
@@ -163,7 +88,7 @@ export default function HomePage() {
                             className="input-custom md:w-64"
                         >
                             <option value="">All Specializations</option>
-                            {specializations.map((spec) => (
+                            {specializations?.map((spec: any) => (
                                 <option key={spec.id} value={spec.name}>
                                     {spec.name}
                                 </option>
@@ -175,7 +100,7 @@ export default function HomePage() {
 
             {/* Doctors List */}
             <section className="container-custom pb-16">
-                {loading ? (
+                {doctorsLoading ? (
                     <LoadingSpinner size="lg" className="py-12" />
                 ) : filteredDoctors.length === 0 ? (
                     <div className="py-12 text-center text-muted-foreground">
@@ -183,7 +108,7 @@ export default function HomePage() {
                     </div>
                 ) : (
                     <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                        {filteredDoctors.map((doctor) => (
+                        {filteredDoctors.map((doctor: Doctor) => (
                             <Link
                                 key={doctor.id}
                                 href={`/doctors/${doctor.id}`}
@@ -193,11 +118,11 @@ export default function HomePage() {
                                     <div className="relative h-16 w-16 flex-shrink-0 overflow-hidden rounded-full bg-primary-100">
                                         <Image
                                             src={getAvatarUrl(
-                                                doctor.profiles.avatar_url,
-                                                doctor.profiles.gender,
+                                                doctor.avatar_url,
+                                                doctor.gender,
                                                 'doctor'
                                             )}
-                                            alt={doctor.profiles.full_name}
+                                            alt={doctor.full_name}
                                             fill
                                             className="object-cover"
                                         />
@@ -207,10 +132,10 @@ export default function HomePage() {
                                         <div className="flex items-start justify-between">
                                             <div>
                                                 <h3 className="font-semibold text-primary-900 group-hover:text-primary">
-                                                    {doctor.profiles.full_name}
+                                                    {doctor.full_name}
                                                 </h3>
                                                 <p className="text-sm text-muted-foreground">
-                                                    {doctor.specializations.name}
+                                                    {doctor.specialization_name}
                                                 </p>
                                             </div>
                                             {doctor.is_popular && (
